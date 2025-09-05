@@ -2,6 +2,7 @@
 
 const express = require('express');
 const http = require('http');
+const Message = require(newFunction());
 const { Server } = require('socket.io');
 const bodyParser = require('body-parser');
 
@@ -10,6 +11,19 @@ const server = http.createServer(app);
 
 // Body parser
 app.use(bodyParser.json());
+
+const mongoose = require('mongoose');
+const { timeStamp } = require('console');
+const { Socket } = require('dgram');
+const { type } = require('os');
+
+// MongoDB connect
+mongoose.connect('mongodb+srv://rofikul6424islam_db_user:pp0E8b5OSlFttuJR@realtimechat.jbjqjwx.mongodb.net/?retryWrites=true&w=majority&appName=realtimechat', {
+  useNewUrlParser: true,
+  useUnifiedTopology: true,
+})
+.then(() => console.log("✅ MongoDB Connected"))
+.catch(err => console.error("❌ MongoDB Error:", err));
 
 // Socket.IO server setup
 const io = new Server(server, {
@@ -45,10 +59,14 @@ io.on('connection', (socket) => {
   console.log(`User connected: ${socket.id}`);
 
   // Join a channel/group
-  socket.on('joinChannel', (data) => {
+  socket.on('joinChannel', async (data) => {
     const { channelId } = data;
     console.log(`User ${socket.id} joining channel: ${channelId}`);
     socket.join(channelId);
+
+    const oldMessages = await Message.find({groups:channelId}).sort({timeStamp:1});
+    socket.emit('oldMessages',oldMessages);
+
 
     // Add user to group members if group exists
     const group = groups.find(g => g.groupId === channelId);
@@ -60,20 +78,39 @@ io.on('connection', (socket) => {
   });
 
   // Send message
-  socket.on('sendMessage', (data) => {
+  socket.on('sendMessage', async (data) => {
     const { text, to, groupId } = data;
 
-    if (to) {
-      // Single chat
-      io.to(to).emit('newMessage', { text, senderId: socket.id, type: 'private' });
-      console.log(`Private message from ${socket.id} to ${to}: "${text}"`);
-    } else if (groupId) {
-      // Group chat
-      io.to(groupId).emit('newMessage', { text, senderId: socket.id, type: 'group' });
-      console.log(`Group message to ${groupId} by ${socket.id}: "${text}"`);
-    } else {
-      console.log(`Message from ${socket.id} ignored: no target`);
+    if(groupId){
+      const newMessage = new Message({
+        text,
+        senderId:socket.id,
+        groupId
+      });
+      await newMessage.save();
     }
+
+    io.to(groupId).emit('newMessage',{
+      text,
+      senderId:Socket.id,
+      groupId,
+      timeStamp: newMessage.timeStamp,
+      type:'group'
+    });
+
+    console.log(`group message to ${groupId} by ${socket.id}: "${text}`)
+
+    // if (to) {
+    //   // Single chat
+    //   io.to(to).emit('newMessage', { text, senderId: socket.id, type: 'private' });
+    //   console.log(`Private message from ${socket.id} to ${to}: "${text}"`);
+    // } else if (groupId) {
+    //   // Group chat
+    //   io.to(groupId).emit('newMessage', { text, senderId: socket.id, type: 'group' });
+    //   console.log(`Group message to ${groupId} by ${socket.id}: "${text}"`);
+    // } else {
+    //   console.log(`Message from ${socket.id} ignored: no target`);
+    // }
   });
 
   // Disconnect
@@ -90,3 +127,7 @@ io.on('connection', (socket) => {
 server.listen(PORT, () => {
   console.log(`Server is listening on http://localhost:${PORT}`);
 });
+function newFunction() {
+  return './model/Message';
+}
+
