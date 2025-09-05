@@ -3,6 +3,7 @@
 const express = require('express');
 const http = require('http');
 const Message = require(newFunction());
+require('dotenv').config();
 
 const { Server } = require('socket.io');
 const bodyParser = require('body-parser');
@@ -19,7 +20,7 @@ const { Socket } = require('dgram');
 const { type } = require('os');
 
 // MongoDB connect
-mongoose.connect('mongodb+srv://rofikul6424islam_db_user:pp0E8b5OSlFttuJR@realtimechat.jbjqjwx.mongodb.net/?retryWrites=true&w=majority&appName=realtimechat', {
+mongoose.connect(process.env.MONGO_URI, {
   useNewUrlParser: true,
   useUnifiedTopology: true,
 })
