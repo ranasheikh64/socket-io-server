@@ -3,6 +3,7 @@
 const express = require('express');
 const http = require('http');
 const Message = require(newFunction());
+
 const { Server } = require('socket.io');
 const bodyParser = require('body-parser');
 
@@ -58,60 +59,50 @@ app.post('/createGroup', (req, res) => {
 io.on('connection', (socket) => {
   console.log(`User connected: ${socket.id}`);
 
-  // Join a channel/group
-  socket.on('joinChannel', async (data) => {
-    const { channelId } = data;
-    console.log(`User ${socket.id} joining channel: ${channelId}`);
-    socket.join(channelId);
+socket.on('joinChannel', async (data) => {
+  const { channelId } = data;
+  console.log(`User ${socket.id} joining channel: ${channelId}`);
+  socket.join(channelId);
 
-    const oldMessages = await Message.find({groups:channelId}).sort({timeStamp:1});
-    socket.emit('oldMessages',oldMessages);
+  // Fetch old messages from MongoDB
+  const oldMessages = await Message.find({ channelId }).sort({ timeStamp: 1 });
+  socket.emit('oldMessages', oldMessages);
+
+  // Add user to in-memory group
+  const group = groups.find(g => g.groupId === channelId);
+  if (group && !group.members.includes(socket.id)) {
+    group.members.push(socket.id);
+  }
+
+  socket.emit('joined', { message: `You have joined channel: ${channelId}` });
+});
 
 
-    // Add user to group members if group exists
-    const group = groups.find(g => g.groupId === channelId);
-    if (group && !group.members.includes(socket.id)) {
-      group.members.push(socket.id);
-    }
+ socket.on('sendMessage', async (data) => {
+  const { text, groupId } = data;
 
-    socket.emit('joined', { message: `You have joined channel: ${channelId}` });
+  if (!groupId) return;
+
+  // Save message in MongoDB
+  const newMessage = new Message({
+    text,
+    senderId: socket.id,
+    channelId: groupId
+  });
+  await newMessage.save();
+
+  // Emit to all users in the channel
+  io.to(groupId).emit('newMessage', {
+    text,
+    senderId: socket.id,
+    channelId: groupId,
+    timeStamp: newMessage.timeStamp,
+    type: 'group'
   });
 
-  // Send message
-  socket.on('sendMessage', async (data) => {
-    const { text, to, groupId } = data;
+  console.log(`Group message to ${groupId} by ${socket.id}: "${text}"`);
+});
 
-    if(groupId){
-      const newMessage = new Message({
-        text,
-        senderId:socket.id,
-        groupId
-      });
-      await newMessage.save();
-    }
-
-    io.to(groupId).emit('newMessage',{
-      text,
-      senderId:Socket.id,
-      groupId,
-      timeStamp: newMessage.timeStamp,
-      type:'group'
-    });
-
-    console.log(`group message to ${groupId} by ${socket.id}: "${text}`)
-
-    // if (to) {
-    //   // Single chat
-    //   io.to(to).emit('newMessage', { text, senderId: socket.id, type: 'private' });
-    //   console.log(`Private message from ${socket.id} to ${to}: "${text}"`);
-    // } else if (groupId) {
-    //   // Group chat
-    //   io.to(groupId).emit('newMessage', { text, senderId: socket.id, type: 'group' });
-    //   console.log(`Group message to ${groupId} by ${socket.id}: "${text}"`);
-    // } else {
-    //   console.log(`Message from ${socket.id} ignored: no target`);
-    // }
-  });
 
   // Disconnect
   socket.on('disconnect', () => {
